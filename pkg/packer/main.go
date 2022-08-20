@@ -3,8 +3,13 @@ package packer
 import (
 	"errors"
 	"fmt"
+	svg "github.com/ajstarks/svgo"
 	"math"
+	"math/rand"
+	"os"
 	"sort"
+	"strconv"
+	"time"
 )
 
 type HasArea interface {
@@ -38,8 +43,9 @@ type Packer interface {
 	SetDimensions(width float64, height float64)
 	SetRectangles(rectangles []Rectangle)
 	Compile() float64
-	getEnergy() float64
-	getPlacedRectangles() []Rectangle
+	GetEnergy() float64
+	GetPlacedRectangles() []Rectangle
+	StoreDraw()
 }
 
 type CutoutLayout struct {
@@ -89,12 +95,57 @@ func (c *CutoutLayout) Compile() (energy float64, err error) {
 	return c.energy, nil
 }
 
-func (c *CutoutLayout) getEnergy() float64 {
+func (c *CutoutLayout) GetEnergy() float64 {
 	return c.energy
 }
 
-func (c *CutoutLayout) getPlacedRectangles() []Rectangle {
+func (c *CutoutLayout) GetPlacedRectangles() []Rectangle {
 	return c.placedRectangles
+}
+
+func (c *CutoutLayout) StoreDraw() {
+	divider := 10
+	labelShiftX := 5
+	labelShiftY := 5
+	labelHeight := 17
+	scale := func(num float64) int {
+		return int(num / float64(divider))
+	}
+	rs := rand.NewSource(time.Now().UnixNano())
+	random := rand.New(rs)
+	rInt := func(max int) int {
+		return random.Intn(max)
+	}
+	rStr := func(max int) string {
+		return strconv.Itoa(rInt(max))
+	}
+	randomColor := func() string {
+		r := rStr(200)
+		g := rStr(200)
+		b := rStr(200)
+		return "rgb(" + r + "," + g + "," + b + ", 0.5)"
+	}
+
+	f, err := os.Create("/tmp/dat.svg")
+	if err != nil {
+		fmt.Errorf("error creating file. %v", err)
+	}
+
+	canvas := svg.New(f)
+	width := 10000
+	height := 10000
+	canvas.Start(width, height)
+
+	canvas.Rect(0, 0, scale(c.width), scale(c.height), "fill:none;stroke:red;stroke_width:2")
+
+	for _, r := range c.placedRectangles {
+		canvas.Rect(scale(r.X), scale(r.Y), scale(r.Width), scale(r.Height),
+			"fill:"+randomColor()+";stroke:black;stroke_width:2")
+		canvas.Text(scale(r.X)+labelShiftX, scale(r.Y+r.Height)-labelShiftY,
+			strconv.Itoa(int(r.Id)), "font-weight:normal;font-size:"+strconv.Itoa(labelHeight)+"px")
+	}
+
+	canvas.End()
 }
 
 func (c *CutoutLayout) placeRectangle(r Rectangle) (placedRectangle Rectangle, isPlaced bool, err error) {

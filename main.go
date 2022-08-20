@@ -23,6 +23,7 @@ func main() {
 		fmt.Errorf(err.Error())
 	}
 	fmt.Println("Energy", energy)
+	cutout.StoreDraw()
 
 	//for _, r := range cutout.placedRectangles {
 	//	fmt.Println(r)
