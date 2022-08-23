@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	svg "github.com/ajstarks/svgo"
-	"math"
 	"math/rand"
 	"os"
 	"sort"
@@ -24,11 +23,11 @@ type Rectangle struct {
 	Y      float64
 }
 
-func NewRectangle(id uint64, width float64, height float64) (rectangle Rectangle, err error) {
+func NewRectangle(id uint64, width float64, height float64) (rectangle *Rectangle, err error) {
 	if width < 0 || height < 0 {
-		return Rectangle{}, errors.New("Rectangle W or H < 0")
+		return &Rectangle{}, errors.New("Rectangle W or H < 0")
 	}
-	return Rectangle{
+	return &Rectangle{
 		Id:     id,
 		Width:  width,
 		Height: height,
@@ -42,10 +41,17 @@ func (r *Rectangle) Area() float64 {
 type Packer interface {
 	SetDimensions(width float64, height float64)
 	SetRectangles(rectangles []Rectangle)
-	Compile() float64
-	GetEnergy() float64
+	Compile() (float64, error)
+	//GetEnergy() float64
 	GetPlacedRectangles() []Rectangle
 	StoreDraw()
+}
+
+type layoutChange struct {
+	aIndex int
+	bIndex int
+	rotate bool
+	rIndex int
 }
 
 type CutoutLayout struct {
@@ -53,30 +59,43 @@ type CutoutLayout struct {
 	height           float64
 	rectangles       []Rectangle
 	placedRectangles []Rectangle
+	changes          []layoutChange
 	energy           float64
+	rs               rand.Source
 }
 
-func NewCutoutLayout(width float64, height float64) (cutout CutoutLayout, err error) {
+func NewCutoutLayout(width float64, height float64) (cutout *CutoutLayout, err error) {
 	if width < 0 || height < 0 {
-		return CutoutLayout{}, errors.New("CutoutLayout W or H < 0")
+		return &CutoutLayout{}, errors.New("CutoutLayout W or H < 0")
 	}
-	return CutoutLayout{
+	return &CutoutLayout{
 		width:  width,
 		height: height,
+		rs:     rand.NewSource(time.Now().UnixNano()),
 	}, nil
 }
 
 func (c *CutoutLayout) SetRectangles(rs []Rectangle) {
 	// TODO validation
 	// Create border rectangles
+	//c.placedRectangles = []Rectangle{
+	//	{Id: 0, Y: 0, X: 0, Width: 0, Height: c.height},
+	//	{Id: 0, Y: 0, X: 0, Width: c.width, Height: 0},
+	//}
+	c.reset()
+	c.rectangles = rs
+	//c.saveState()
+}
+
+func (c *CutoutLayout) reset() {
 	c.placedRectangles = []Rectangle{
 		{Id: 0, Y: 0, X: 0, Width: 0, Height: c.height},
 		{Id: 0, Y: 0, X: 0, Width: c.width, Height: 0},
 	}
-	c.rectangles = rs
+	c.revertChanges()
 }
 
-func (c *CutoutLayout) Compile() (energy float64, err error) {
+func (c *CutoutLayout) Compile() error {
 	for _, r := range c.rectangles {
 		// Place input rectangle at top right corner
 		r.X = c.width - r.Width
@@ -84,26 +103,22 @@ func (c *CutoutLayout) Compile() (energy float64, err error) {
 
 		placedRectangle, isPlaced, err := c.placeRectangle(r)
 		if err != nil {
-			return 0, err
+			return err
 		}
 		if isPlaced {
 			c.placedRectangles = append(c.placedRectangles, placedRectangle)
 		}
 	}
-
 	c.calculateEnergy()
-	return c.energy, nil
-}
 
-func (c *CutoutLayout) GetEnergy() float64 {
-	return c.energy
+	return nil
 }
 
 func (c *CutoutLayout) GetPlacedRectangles() []Rectangle {
 	return c.placedRectangles
 }
 
-func (c *CutoutLayout) StoreDraw() {
+func (c *CutoutLayout) StoreDraw() (err error) {
 	divider := 10
 	labelShiftX := 5
 	labelShiftY := 5
@@ -112,40 +127,46 @@ func (c *CutoutLayout) StoreDraw() {
 		return int(num / float64(divider))
 	}
 	rs := rand.NewSource(time.Now().UnixNano())
-	random := rand.New(rs)
-	rInt := func(max int) int {
-		return random.Intn(max)
+	rndInt := func(max int) int {
+		return rand.New(rs).Intn(max)
 	}
-	rStr := func(max int) string {
-		return strconv.Itoa(rInt(max))
+	rndStr := func(max int) string {
+		return strconv.Itoa(rndInt(max))
 	}
 	randomColor := func() string {
-		r := rStr(200)
-		g := rStr(200)
-		b := rStr(200)
+		r := rndStr(200)
+		g := rndStr(200)
+		b := rndStr(200)
 		return "rgb(" + r + "," + g + "," + b + ", 0.5)"
 	}
 
-	f, err := os.Create("/tmp/dat.svg")
+	f, err := os.Create("layout.svg")
 	if err != nil {
 		fmt.Errorf("error creating file. %v", err)
+		return err
 	}
 
 	canvas := svg.New(f)
-	width := 10000
-	height := 10000
-	canvas.Start(width, height)
+	canvas.Start(scale(c.width), scale(c.height))
 
 	canvas.Rect(0, 0, scale(c.width), scale(c.height), "fill:none;stroke:red;stroke_width:2")
+	canvas.Text(4*labelShiftX, 4*labelShiftY,
+		fmt.Sprintf("%f", c.energy), "font-weight:bold;font-size:"+strconv.Itoa(int(float64(labelHeight)*1.5))+"px")
 
 	for _, r := range c.placedRectangles {
 		canvas.Rect(scale(r.X), scale(r.Y), scale(r.Width), scale(r.Height),
 			"fill:"+randomColor()+";stroke:black;stroke_width:2")
 		canvas.Text(scale(r.X)+labelShiftX, scale(r.Y+r.Height)-labelShiftY,
 			strconv.Itoa(int(r.Id)), "font-weight:normal;font-size:"+strconv.Itoa(labelHeight)+"px")
+
+		canvas.Text(scale(r.X)+labelShiftX, scale(r.Y)+labelShiftY*2,
+			strconv.Itoa(int(r.X)), "font-weight:normal;font-size:10px")
+		canvas.Text(scale(r.X)+labelShiftX, scale(r.Y)+labelShiftY*4,
+			strconv.Itoa(int(r.Y+r.Height)), "font-weight:normal;font-size:10px")
 	}
 
 	canvas.End()
+	return nil
 }
 
 func (c *CutoutLayout) placeRectangle(r Rectangle) (placedRectangle Rectangle, isPlaced bool, err error) {
@@ -167,8 +188,7 @@ func (c *CutoutLayout) placeRectangle(r Rectangle) (placedRectangle Rectangle, i
 			continue
 		}
 		// Find X-crossing
-		if (placedR.X+placedR.Width <= r.X && placedR.X+placedR.Width > r.X) ||
-			(placedR.X+placedR.Width > r.X && placedR.X < r.X+r.Width) {
+		if placedR.X+placedR.Width > r.X && placedR.X < r.X+r.Width {
 			// If we're standstill on it already
 			if r.Y == placedR.Y+placedR.Height {
 				if r.Y+r.Height <= c.height {
@@ -178,8 +198,8 @@ func (c *CutoutLayout) placeRectangle(r Rectangle) (placedRectangle Rectangle, i
 				}
 			} else {
 				r.Y = placedR.Y + placedR.Height
-				break
 			}
+			break
 		}
 	}
 
@@ -188,32 +208,130 @@ func (c *CutoutLayout) placeRectangle(r Rectangle) (placedRectangle Rectangle, i
 			continue
 		}
 		// Find Y-crossing
-		if (placedR.Y+placedR.Height <= r.Y && placedR.Y+placedR.Height > r.Y) ||
-			(placedR.Y+placedR.Height > r.Y && placedR.Y < r.Y+r.Height) {
+		if placedR.Y+placedR.Height > r.Y && placedR.Y < r.Y+r.Height {
 			if r.X == placedR.X+placedR.Width {
-				if r.X+r.Width <= c.width {
+				if r.Y+r.Height <= c.height {
 					return r, true, nil
 				} else {
 					return Rectangle{}, false, nil
 				}
 			} else {
 				r.X = placedR.X + placedR.Width
-				break
 			}
+			break
 		}
 	}
 
-	fmt.Println(r)
+	//fmt.Println(r)
 	return c.placeRectangle(r)
 }
 
 func (c *CutoutLayout) calculateEnergy() {
 	sumArea := float64(0)
-
 	for _, r := range c.placedRectangles {
 		sumArea += r.Area()
 	}
+	c.energy = 1 - sumArea/(c.width*c.height)
+}
 
-	e := 1 - sumArea/(c.width*c.height)
-	c.energy = math.Round(e*100) / 100
+// Shaker
+
+func (c *CutoutLayout) Shake() (energy float64, err error) {
+	c.reset()
+
+	// Find positions to change
+	if len(c.rectangles) >= 2 {
+		// Already has two border rectangles
+		shakeUntilIndex := len(c.placedRectangles) - 2
+		if shakeUntilIndex < 2 {
+			shakeUntilIndex = len(c.rectangles) - 1
+		}
+
+		var aIndex, bIndex, rIndex int
+		var rotate bool
+
+		unchanged := true
+		for unchanged {
+			if rand.New(c.rs).Float64() > 0.2 {
+				unchanged = false
+				validPair := false
+				for !validPair {
+					aIndex = rand.New(c.rs).Intn(shakeUntilIndex + 1)
+					bIndex = rand.New(c.rs).Intn(shakeUntilIndex + 1)
+					if !c.areRectanglesSame(aIndex, bIndex) {
+						validPair = true
+					}
+				}
+			}
+			if rand.New(c.rs).Float64() > 0.4 {
+				unchanged = false
+				rIndex = rand.New(c.rs).Intn(shakeUntilIndex + 1)
+				rotate = true
+			}
+		}
+
+		c.change(layoutChange{
+			aIndex: aIndex,
+			bIndex: bIndex,
+			rotate: rotate,
+			rIndex: rIndex,
+		})
+	}
+
+	err = c.Compile()
+	if err != nil {
+		return 0, err
+	}
+
+	return c.energy, nil
+}
+
+func (c *CutoutLayout) areRectanglesSame(aIndex int, bIndex int) bool {
+	// TODO compare shapes
+	return aIndex == bIndex ||
+		(c.rectangles[aIndex].Width == c.rectangles[bIndex].Width &&
+			c.rectangles[aIndex].Height == c.rectangles[bIndex].Height)
+}
+
+func (c *CutoutLayout) Take() {
+	c.changes = []layoutChange{}
+}
+
+func (c *CutoutLayout) change(ch layoutChange) {
+	tmpR := c.rectangles[ch.aIndex]
+	c.rectangles[ch.aIndex] = c.rectangles[ch.bIndex]
+	c.rectangles[ch.bIndex] = tmpR
+
+	//fmt.Println("Flip", i, j)
+	if ch.rotate {
+		width := c.rectangles[ch.rIndex].Width
+		c.rectangles[ch.rIndex].Width = c.rectangles[ch.rIndex].Height
+		c.rectangles[ch.rIndex].Height = width
+		//fmt.Println("Rotate", rIndex)
+	}
+	c.changes = append(c.changes, ch)
+}
+
+func (c *CutoutLayout) revertChanges() {
+	if len(c.changes) > 0 {
+		for _, ch := range c.changes {
+			if ch.rotate {
+				c.rectangles[ch.rIndex].Width, c.rectangles[ch.rIndex].Height = c.rectangles[ch.rIndex].Height, c.rectangles[ch.rIndex].Width
+			}
+			if ch.aIndex != ch.bIndex {
+				tmpR := c.rectangles[ch.aIndex]
+				c.rectangles[ch.aIndex] = c.rectangles[ch.bIndex]
+				c.rectangles[ch.bIndex] = tmpR
+			}
+		}
+		c.changes = []layoutChange{}
+	}
+}
+
+func (c *CutoutLayout) GetEnergy() float64 {
+	return c.energy
+}
+
+func (c *CutoutLayout) StoreReport() {
+	c.StoreDraw()
 }
