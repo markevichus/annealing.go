@@ -28,23 +28,10 @@ func main() {
 		fmt.Errorf("error creating layout: %v\n", err.Error())
 	}
 	cutout.SetRectangles(rectangles)
-	//cutout.Shake()
-	//cutout.Compile()
 
-	//cutout.Shake()
-	//cutout.Shake()
-	//cutout.Shake()
-	//cutout.Shake()
-
-	////fmt.Println(cutout.GetPlacedRectangles())
-	//cutout.StoreReport()
-
-	am := cooler.NewAnnealingMachine(cutout, 0.0015, 20000)
+	am := cooler.NewAnnealingMachine(cutout, 0.0015, 30000)
 	err = am.Run()
 	if err != nil {
 		fmt.Errorf("error runing Annealer: %v\n", err.Error())
 	}
-
-	//rs := rand.NewSource(time.Now().UnixNano())
-	//fmt.Println(rand.New(rs).Intn(100))
 }

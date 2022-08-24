@@ -64,7 +64,6 @@ func (am *AnnealingMachine) Run() error {
 		if err != nil {
 			return err
 		}
-		//fmt.Println("e", e)
 
 		dE := e - minE
 		if dE < 0 {
@@ -84,9 +83,6 @@ func (am *AnnealingMachine) Run() error {
 			break
 		}
 		am.tick += 1
-		//if am.tick == 10 {
-		//	break
-		//}
 	}
 	am.storeReport()
 
@@ -156,17 +152,6 @@ func (am *AnnealingMachine) storeReport() (err error) {
 		pt0 = pt1
 		pe0 = pe1
 	}
-
-	//histToPolyline := func(hist map[int]float64) (px []int, py []int) {
-	//	for tick, v := range hist {
-	//		px = append(px, int(float64(tick)*graphXMul))
-	//		py = append(py, int(v*graphYMul))
-	//	}
-	//	return px, py
-	//}
-	//px, py := histToPolyline(am.eHist)
-	//
-	//graph := [2]int[0, energy_hist[0]*graph_y_mul]
 
 	canvas.End()
 	return nil

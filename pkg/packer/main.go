@@ -6,7 +6,6 @@ import (
 	svg "github.com/ajstarks/svgo"
 	"math/rand"
 	"os"
-	"sort"
 	"strconv"
 	"time"
 )
@@ -42,7 +41,6 @@ type Packer interface {
 	SetDimensions(width float64, height float64)
 	SetRectangles(rectangles []Rectangle)
 	Compile() (float64, error)
-	//GetEnergy() float64
 	GetPlacedRectangles() []Rectangle
 	StoreDraw()
 }
@@ -55,13 +53,15 @@ type layoutChange struct {
 }
 
 type CutoutLayout struct {
-	width            float64
-	height           float64
-	rectangles       []Rectangle
-	placedRectangles []Rectangle
-	changes          []layoutChange
-	energy           float64
-	rs               rand.Source
+	width             float64
+	height            float64
+	rectangles        []Rectangle
+	placedRectangles  []Rectangle
+	xSortedRectangles []Rectangle
+	ySortedRectangles []Rectangle
+	changes           []layoutChange
+	energy            float64
+	rs                rand.Source
 }
 
 func NewCutoutLayout(width float64, height float64) (cutout *CutoutLayout, err error) {
@@ -77,20 +77,20 @@ func NewCutoutLayout(width float64, height float64) (cutout *CutoutLayout, err e
 
 func (c *CutoutLayout) SetRectangles(rs []Rectangle) {
 	// TODO validation
-	// Create border rectangles
-	//c.placedRectangles = []Rectangle{
-	//	{Id: 0, Y: 0, X: 0, Width: 0, Height: c.height},
-	//	{Id: 0, Y: 0, X: 0, Width: c.width, Height: 0},
-	//}
 	c.reset()
 	c.rectangles = rs
-	//c.saveState()
 }
 
 func (c *CutoutLayout) reset() {
+	// Border rectangles
 	c.placedRectangles = []Rectangle{
 		{Id: 0, Y: 0, X: 0, Width: 0, Height: c.height},
 		{Id: 0, Y: 0, X: 0, Width: c.width, Height: 0},
+	}
+	c.xSortedRectangles = []Rectangle{}
+	c.ySortedRectangles = []Rectangle{}
+	for _, r := range c.placedRectangles {
+		c.insertIntoSortedRectangles(r)
 	}
 	c.revertChanges()
 }
@@ -101,12 +101,9 @@ func (c *CutoutLayout) Compile() error {
 		r.X = c.width - r.Width
 		r.Y = c.height
 
-		placedRectangle, isPlaced, err := c.placeRectangle(r)
+		_, _, err := c.placeRectangle(r)
 		if err != nil {
 			return err
-		}
-		if isPlaced {
-			c.placedRectangles = append(c.placedRectangles, placedRectangle)
 		}
 	}
 	c.calculateEnergy()
@@ -170,20 +167,22 @@ func (c *CutoutLayout) StoreDraw() (err error) {
 }
 
 func (c *CutoutLayout) placeRectangle(r Rectangle) (placedRectangle Rectangle, isPlaced bool, err error) {
+	placed := false
+	outOfHeight := false
 
-	ySortedRectangles := make([]Rectangle, len(c.placedRectangles))
-	copy(ySortedRectangles, c.placedRectangles)
-	sort.Slice(ySortedRectangles, func(i, j int) bool {
-		return ySortedRectangles[i].Y+ySortedRectangles[i].Height > ySortedRectangles[j].Y+ySortedRectangles[j].Height
-	})
+	//ySortedRectangles := make([]Rectangle, len(c.placedRectangles))
+	//copy(ySortedRectangles, c.placedRectangles)
+	//sort.Slice(ySortedRectangles, func(i, j int) bool {
+	//	return ySortedRectangles[i].Y+ySortedRectangles[i].Height > ySortedRectangles[j].Y+ySortedRectangles[j].Height
+	//})
+	//
+	//xSortedRectangles := make([]Rectangle, len(c.placedRectangles))
+	//copy(xSortedRectangles, c.placedRectangles)
+	//sort.Slice(xSortedRectangles, func(i, j int) bool {
+	//	return xSortedRectangles[i].X+xSortedRectangles[i].Width > xSortedRectangles[j].X+xSortedRectangles[j].Width
+	//})
 
-	xSortedRectangles := make([]Rectangle, len(c.placedRectangles))
-	copy(xSortedRectangles, c.placedRectangles)
-	sort.Slice(xSortedRectangles, func(i, j int) bool {
-		return xSortedRectangles[i].X+xSortedRectangles[i].Width > xSortedRectangles[j].X+xSortedRectangles[j].Width
-	})
-
-	for _, placedR := range ySortedRectangles {
+	for _, placedR := range c.ySortedRectangles {
 		if placedR.Y+placedR.Height > r.Y {
 			continue
 		}
@@ -192,9 +191,11 @@ func (c *CutoutLayout) placeRectangle(r Rectangle) (placedRectangle Rectangle, i
 			// If we're standstill on it already
 			if r.Y == placedR.Y+placedR.Height {
 				if r.Y+r.Height <= c.height {
-					return r, true, nil
+					//return r, true, nil
+					placed = true
 				} else {
-					return Rectangle{}, false, nil
+					//return Rectangle{}, false, nil
+					outOfHeight = true
 				}
 			} else {
 				r.Y = placedR.Y + placedR.Height
@@ -203,27 +204,72 @@ func (c *CutoutLayout) placeRectangle(r Rectangle) (placedRectangle Rectangle, i
 		}
 	}
 
-	for _, placedR := range xSortedRectangles {
-		if placedR.X+placedR.Width > r.X {
-			continue
-		}
-		// Find Y-crossing
-		if placedR.Y+placedR.Height > r.Y && placedR.Y < r.Y+r.Height {
-			if r.X == placedR.X+placedR.Width {
-				if r.Y+r.Height <= c.height {
-					return r, true, nil
-				} else {
-					return Rectangle{}, false, nil
-				}
-			} else {
-				r.X = placedR.X + placedR.Width
+	if !placed {
+		for _, placedR := range c.xSortedRectangles {
+			if placedR.X+placedR.Width > r.X {
+				continue
 			}
-			break
+			// Find Y-crossing
+			if placedR.Y+placedR.Height > r.Y && placedR.Y < r.Y+r.Height {
+				if r.X == placedR.X+placedR.Width {
+					if r.Y+r.Height <= c.height {
+						//return r, true, nil
+						placed = true
+					} else {
+						//return Rectangle{}, false, nil
+						outOfHeight = true
+					}
+				} else {
+					r.X = placedR.X + placedR.Width
+				}
+				break
+			}
 		}
 	}
 
-	//fmt.Println(r)
-	return c.placeRectangle(r)
+	if placed {
+		c.placedRectangles = append(c.placedRectangles, r)
+		c.insertIntoSortedRectangles(r)
+		return r, true, nil
+	} else if outOfHeight {
+		return Rectangle{}, false, nil
+	} else {
+		return c.placeRectangle(r)
+	}
+
+}
+
+func (c *CutoutLayout) insertIntoSortedRectangles(placedRectangle Rectangle) {
+	var iIndex int
+	found := false
+	for i, sR := range c.ySortedRectangles {
+		if placedRectangle.Y+placedRectangle.Height > sR.Y+sR.Height {
+			iIndex = i
+			found = true
+			break
+		}
+	}
+	if found {
+		c.ySortedRectangles = append(c.ySortedRectangles[:iIndex+1], c.ySortedRectangles[iIndex:]...)
+		c.ySortedRectangles[iIndex] = placedRectangle
+	} else {
+		c.ySortedRectangles = append(c.ySortedRectangles, placedRectangle)
+	}
+
+	found = false
+	for i, sR := range c.xSortedRectangles {
+		if placedRectangle.X+placedRectangle.Width > sR.X+sR.Width {
+			iIndex = i
+			found = true
+			break
+		}
+	}
+	if found {
+		c.xSortedRectangles = append(c.xSortedRectangles[:iIndex+1], c.xSortedRectangles[iIndex:]...)
+		c.xSortedRectangles[iIndex] = placedRectangle
+	} else {
+		c.xSortedRectangles = append(c.xSortedRectangles, placedRectangle)
+	}
 }
 
 func (c *CutoutLayout) calculateEnergy() {
@@ -263,7 +309,7 @@ func (c *CutoutLayout) Shake() (energy float64, err error) {
 					}
 				}
 			}
-			if rand.New(c.rs).Float64() > 0.4 {
+			if rand.New(c.rs).Float64() > 0.2 {
 				unchanged = false
 				rIndex = rand.New(c.rs).Intn(shakeUntilIndex + 1)
 				rotate = true
@@ -302,12 +348,10 @@ func (c *CutoutLayout) change(ch layoutChange) {
 	c.rectangles[ch.aIndex] = c.rectangles[ch.bIndex]
 	c.rectangles[ch.bIndex] = tmpR
 
-	//fmt.Println("Flip", i, j)
 	if ch.rotate {
 		width := c.rectangles[ch.rIndex].Width
 		c.rectangles[ch.rIndex].Width = c.rectangles[ch.rIndex].Height
 		c.rectangles[ch.rIndex].Height = width
-		//fmt.Println("Rotate", rIndex)
 	}
 	c.changes = append(c.changes, ch)
 }
