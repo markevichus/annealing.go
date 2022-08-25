@@ -12,7 +12,7 @@ import (
 )
 
 type HasArea interface {
-	Area() float64
+	CalArea() float64
 }
 
 type Rectangle struct {
@@ -21,6 +21,7 @@ type Rectangle struct {
 	Height float64
 	X      float64
 	Y      float64
+	Area   float64
 }
 
 func NewRectangle(id uint64, width float64, height float64) (rectangle *Rectangle, err error) {
@@ -34,8 +35,10 @@ func NewRectangle(id uint64, width float64, height float64) (rectangle *Rectangl
 	}, nil
 }
 
-func (r *Rectangle) Area() float64 {
-	return r.Width * r.Height
+func (r *Rectangle) CalArea() float64 {
+	area := r.Width * r.Height
+	r.Area = area
+	return area
 }
 
 type Packer interface {
@@ -82,6 +85,7 @@ func (c *CutoutLayout) SetRectangles(rs []Rectangle) {
 	c.rectangles = make([]Rectangle, len(rs))
 	for i, r := range rs {
 		c.rectangles[i] = r
+		c.rectangles[i].CalArea()
 	}
 }
 
@@ -257,7 +261,7 @@ func (c *CutoutLayout) insertIntoSortedRectangles(placedRectangle Rectangle) {
 func (c *CutoutLayout) calculateEnergy() {
 	sumArea := float64(0)
 	for _, r := range c.placedRectangles {
-		sumArea += r.Area()
+		sumArea += r.Area
 	}
 	c.energy = 1 - sumArea/(c.width*c.height)
 }
@@ -357,16 +361,6 @@ func (c *CutoutLayout) revertChanges() {
 func (c *CutoutLayout) GetEnergy() float64 {
 	return c.energy
 }
-
-//func (c *CutoutLayout) StoreReport() (err error) {
-//	f, err := os.Create("layout.svg")
-//	if err != nil {
-//		fmt.Errorf("error creating file. %v", err)
-//		return err
-//	}
-//
-//	return c.StoreDraw(f)
-//}
 
 func (c *CutoutLayout) GetResult() annealer.ShakeResult {
 	sr := annealer.ShakeResult{Energy: c.energy}

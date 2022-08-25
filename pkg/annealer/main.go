@@ -12,8 +12,6 @@ import (
 
 type ResultHandler interface {
 	StoreReport() (err error)
-	//Write(b []byte) (n int, err error)
-	//Read(b []byte) (n int, err error)
 }
 type ShakeResult struct {
 	Id     string
@@ -98,7 +96,7 @@ func (am *AnnealingMachine) Run(id string) (result ShakeResult, err error) {
 	am.id = id
 	am.reset()
 	var minE float64 = 1
-	var bestResult ShakeResult
+	var bestSR ShakeResult
 
 	for {
 		e, err := am.shaker.Shake()
@@ -113,10 +111,10 @@ func (am *AnnealingMachine) Run(id string) (result ShakeResult, err error) {
 			am.transit()
 			// Get Shaker report data
 			//am.shaker.StoreReport()
-			bestResult = am.shaker.GetResult()
-			bestResult.Id = am.id
-			bestResult.Tick = am.tick
-			bestResult.Temp = am.temp
+			bestSR = am.shaker.GetResult()
+			bestSR.Id = am.id
+			bestSR.Tick = am.tick
+			bestSR.Temp = am.temp
 		} else if am.shouldITransit(dE) {
 			//fmt.Println("random", e, am.temp, am.tick)
 			am.transit()
@@ -124,16 +122,14 @@ func (am *AnnealingMachine) Run(id string) (result ShakeResult, err error) {
 		am.decreaseTemperature()
 
 		if am.tick == am.stopTick || am.temp <= am.stopTemp {
-			fmt.Println("STOP", bestResult.Energy, bestResult.Tick, bestResult.Temp, bestResult.Id)
+			//fmt.Println(bestSR.Id, fmt.Sprintf("\t"), bestSR.Energy, bestSR.Tick, bestSR.Temp)
+			fmt.Printf("%v\t%v %v %v\n", bestSR.Id, bestSR.Energy, bestSR.Tick, bestSR.Temp)
 			break
 		}
 		am.tick += 1
 	}
-	//fmt.Println("from am", bestResult)
-	//ch <- bestResult
-	//am.storeReport()
 
-	return bestResult, nil
+	return bestSR, nil
 }
 
 func (am *AnnealingMachine) reset() {

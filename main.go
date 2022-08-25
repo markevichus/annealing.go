@@ -51,7 +51,7 @@ func main() {
 		}
 	}
 
-	fmt.Println("from main", bestSR.Energy, bestSR.Tick, bestSR.Temp, bestSR.Id)
+	fmt.Println("BEST", bestSR.Energy, bestSR.Tick, bestSR.Temp, bestSR.Id)
 	handleAnnealerResult(&bestSR)
 }
 
