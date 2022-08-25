@@ -39,6 +39,7 @@ func main() {
 
 			am := annealer.NewAnnealingMachine(cutout, 0.0015, 30000)
 			result, err := am.Run(id)
+			fmt.Printf("%v\t%v\t%v\t%v\n", result.Id, result.Energy, result.Tick, result.Temp)
 			ch <- result
 		}(strconv.Itoa(i), ch, rectangles)
 	}
@@ -50,8 +51,8 @@ func main() {
 			bestSR = shakeResult
 		}
 	}
-
-	fmt.Println("BEST", bestSR.Energy, bestSR.Tick, bestSR.Temp, bestSR.Id)
+	fmt.Println("BEST")
+	fmt.Printf("%v\t%v\t%v\t%v\n", bestSR.Id, bestSR.Energy, bestSR.Tick, bestSR.Temp)
 	handleAnnealerResult(&bestSR)
 }
 

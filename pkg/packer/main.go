@@ -295,7 +295,7 @@ func (c *CutoutLayout) Shake() (energy float64, err error) {
 					}
 				}
 			}
-			if rand.New(c.rs).Float64() > 0.2 {
+			if rand.New(c.rs).Float64() > 0.3 {
 				unchanged = false
 				rIndex = rand.New(c.rs).Intn(shakeUntilIndex + 1)
 				rotate = true

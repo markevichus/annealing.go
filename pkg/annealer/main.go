@@ -107,23 +107,18 @@ func (am *AnnealingMachine) Run(id string) (result ShakeResult, err error) {
 		dE := e - minE
 		if dE < 0 {
 			minE = e
-			//fmt.Println("minE", e, am.temp)
 			am.transit()
 			// Get Shaker report data
-			//am.shaker.StoreReport()
 			bestSR = am.shaker.GetResult()
 			bestSR.Id = am.id
 			bestSR.Tick = am.tick
 			bestSR.Temp = am.temp
 		} else if am.shouldITransit(dE) {
-			//fmt.Println("random", e, am.temp, am.tick)
 			am.transit()
 		}
 		am.decreaseTemperature()
 
 		if am.tick == am.stopTick || am.temp <= am.stopTemp {
-			//fmt.Println(bestSR.Id, fmt.Sprintf("\t"), bestSR.Energy, bestSR.Tick, bestSR.Temp)
-			fmt.Printf("%v\t%v %v %v\n", bestSR.Id, bestSR.Energy, bestSR.Tick, bestSR.Temp)
 			break
 		}
 		am.tick += 1
