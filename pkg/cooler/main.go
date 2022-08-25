@@ -15,11 +15,16 @@ type Shaker interface {
 	Take()
 	GetEnergy() float64
 	StoreReport()
+	GetResult() ShakeResult
+}
+
+type ShakeResult struct {
+	Energy float64
+	Tick   int
 }
 
 type Annealer interface {
-	Run() error
-	GetBestShake()
+	Run() (ShakeResult, error)
 }
 
 type AnnealingHist struct {
@@ -34,9 +39,7 @@ type AnnealingMachine struct {
 	stopTick int
 	shaker   Shaker
 	hist     map[int]AnnealingHist
-	//tHist    map[int]float64
-	//eHist    map[int]float64
-	rs rand.Source
+	rs       rand.Source
 }
 
 func NewAnnealingMachine(s Shaker, stopTemp float64, stopTick int) *AnnealingMachine {
@@ -55,23 +58,26 @@ func NewAnnealingMachine(s Shaker, stopTemp float64, stopTick int) *AnnealingMac
 	return &am
 }
 
-func (am *AnnealingMachine) Run() error {
+func (am *AnnealingMachine) Run() (result ShakeResult, err error) {
 	am.reset()
 	var minE float64 = 1
+	var bestResult ShakeResult
 
 	for {
 		e, err := am.shaker.Shake()
 		if err != nil {
-			return err
+			return ShakeResult{}, err
 		}
 
 		dE := e - minE
 		if dE < 0 {
 			minE = e
-			fmt.Println("minE", e, am.temp)
+			//fmt.Println("minE", e, am.temp)
 			am.transit()
 			// Get Shaker report data
-			am.shaker.StoreReport()
+			//am.shaker.StoreReport()
+			bestResult = am.shaker.GetResult()
+			bestResult.Tick = am.tick
 		} else if am.shouldITransit(dE) {
 			//fmt.Println("random", e, am.temp, am.tick)
 			am.transit()
@@ -79,14 +85,16 @@ func (am *AnnealingMachine) Run() error {
 		am.decreaseTemperature()
 
 		if am.tick == am.stopTick || am.temp <= am.stopTemp {
-			fmt.Println("STOP", minE, am.tick, am.temp)
+			fmt.Println("STOP", bestResult, am.tick, am.temp)
 			break
 		}
 		am.tick += 1
 	}
-	am.storeReport()
+	//fmt.Println("from am", bestResult)
+	//ch <- bestResult
+	//am.storeReport()
 
-	return nil
+	return bestResult, nil
 }
 
 func (am *AnnealingMachine) reset() {
@@ -105,7 +113,7 @@ func (am *AnnealingMachine) transit() {
 }
 
 func (am *AnnealingMachine) decreaseTemperature() {
-	am.temp *= 1.0 - 1.0/(float64(am.tick)*1.1+20.0)
+	am.temp *= 1.0 - 1.0/(float64(am.tick)*1.2+30.0)
 }
 
 func (am *AnnealingMachine) shouldITransit(dE float64) bool {

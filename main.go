@@ -23,15 +23,37 @@ func main() {
 		rectangles = append(rectangles, *r)
 	}
 
-	cutout, err := packer.NewCutoutLayout(3150, 6000)
-	if err != nil {
-		fmt.Errorf("error creating layout: %v\n", err.Error())
-	}
-	cutout.SetRectangles(rectangles)
+	workersCount := 30
+	//wg := sync.WaitGroup{}
+	//wg.Add(workersCount)
+	ch := make(chan cooler.ShakeResult)
+	for i := 0; i < workersCount; i++ {
+		go func(ch chan cooler.ShakeResult, rs []packer.Rectangle) {
+			//defer wg.Done()
+			cutout, err := packer.NewCutoutLayout(3150, 6000)
+			if err != nil {
+				fmt.Errorf("error creating layout: %v\n", err.Error())
+			}
+			cutout.SetRectangles(rectangles)
 
-	am := cooler.NewAnnealingMachine(cutout, 0.0015, 30000)
-	err = am.Run()
-	if err != nil {
-		fmt.Errorf("error runing Annealer: %v\n", err.Error())
+			am := cooler.NewAnnealingMachine(cutout, 0.0015, 30000)
+			result, err := am.Run()
+			ch <- result
+		}(ch, rectangles)
 	}
+
+	bestSR := cooler.ShakeResult{Energy: 1}
+	for i := 0; i < workersCount; i++ {
+		shakeResult := <-ch
+		if shakeResult.Energy < bestSR.Energy {
+			bestSR = shakeResult
+		}
+	}
+
+	//fmt.Println("from main", <-ch, <-ch, <-ch, <-ch, <-ch, <-ch, <-ch, <-ch)
+	fmt.Println("from main", bestSR)
+
+	//if err != nil {
+	//	fmt.Errorf("error runing Annealer: %v\n", err.Error())
+	//}
 }

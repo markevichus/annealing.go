@@ -1,6 +1,7 @@
 package packer
 
 import (
+	"annealing/pkg/cooler"
 	"errors"
 	"fmt"
 	svg "github.com/ajstarks/svgo"
@@ -78,7 +79,10 @@ func NewCutoutLayout(width float64, height float64) (cutout *CutoutLayout, err e
 func (c *CutoutLayout) SetRectangles(rs []Rectangle) {
 	// TODO validation
 	c.reset()
-	c.rectangles = rs
+	c.rectangles = make([]Rectangle, len(rs))
+	for i, r := range rs {
+		c.rectangles[i] = r
+	}
 }
 
 func (c *CutoutLayout) reset() {
@@ -378,4 +382,8 @@ func (c *CutoutLayout) GetEnergy() float64 {
 
 func (c *CutoutLayout) StoreReport() {
 	c.StoreDraw()
+}
+
+func (c *CutoutLayout) GetResult() cooler.ShakeResult {
+	return cooler.ShakeResult{Energy: c.energy}
 }
