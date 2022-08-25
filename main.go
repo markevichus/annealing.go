@@ -1,9 +1,10 @@
 package main
 
 import (
-	"annealing/pkg/cooler"
+	"annealing/pkg/annealer"
 	"annealing/pkg/packer"
 	"fmt"
+	"strconv"
 )
 
 func main() {
@@ -26,9 +27,9 @@ func main() {
 	workersCount := 30
 	//wg := sync.WaitGroup{}
 	//wg.Add(workersCount)
-	ch := make(chan cooler.ShakeResult)
+	ch := make(chan annealer.ShakeResult)
 	for i := 0; i < workersCount; i++ {
-		go func(ch chan cooler.ShakeResult, rs []packer.Rectangle) {
+		go func(id string, ch chan annealer.ShakeResult, rs []packer.Rectangle) {
 			//defer wg.Done()
 			cutout, err := packer.NewCutoutLayout(3150, 6000)
 			if err != nil {
@@ -36,13 +37,13 @@ func main() {
 			}
 			cutout.SetRectangles(rectangles)
 
-			am := cooler.NewAnnealingMachine(cutout, 0.0015, 30000)
-			result, err := am.Run()
+			am := annealer.NewAnnealingMachine(cutout, 0.0015, 30000)
+			result, err := am.Run(id)
 			ch <- result
-		}(ch, rectangles)
+		}(strconv.Itoa(i), ch, rectangles)
 	}
 
-	bestSR := cooler.ShakeResult{Energy: 1}
+	bestSR := annealer.ShakeResult{Energy: 1}
 	for i := 0; i < workersCount; i++ {
 		shakeResult := <-ch
 		if shakeResult.Energy < bestSR.Energy {
@@ -50,10 +51,13 @@ func main() {
 		}
 	}
 
-	//fmt.Println("from main", <-ch, <-ch, <-ch, <-ch, <-ch, <-ch, <-ch, <-ch)
-	fmt.Println("from main", bestSR)
+	fmt.Println("from main", bestSR.Energy, bestSR.Tick, bestSR.Temp, bestSR.Id)
+	handleAnnealerResult(&bestSR)
+}
 
-	//if err != nil {
-	//	fmt.Errorf("error runing Annealer: %v\n", err.Error())
-	//}
+func handleAnnealerResult(rh annealer.ResultHandler) {
+	err := rh.StoreReport()
+	if err != nil {
+		return
+	}
 }

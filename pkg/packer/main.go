@@ -1,12 +1,12 @@
 package packer
 
 import (
-	"annealing/pkg/cooler"
+	"annealing/pkg/annealer"
 	"errors"
 	"fmt"
 	svg "github.com/ajstarks/svgo"
+	"io"
 	"math/rand"
-	"os"
 	"strconv"
 	"time"
 )
@@ -119,7 +119,7 @@ func (c *CutoutLayout) GetPlacedRectangles() []Rectangle {
 	return c.placedRectangles
 }
 
-func (c *CutoutLayout) StoreDraw() (err error) {
+func (c *CutoutLayout) StoreDraw(w io.Writer) (err error) {
 	divider := 10
 	labelShiftX := 5
 	labelShiftY := 5
@@ -141,13 +141,7 @@ func (c *CutoutLayout) StoreDraw() (err error) {
 		return "rgb(" + r + "," + g + "," + b + ", 0.5)"
 	}
 
-	f, err := os.Create("layout.svg")
-	if err != nil {
-		fmt.Errorf("error creating file. %v", err)
-		return err
-	}
-
-	canvas := svg.New(f)
+	canvas := svg.New(w)
 	canvas.Start(scale(c.width), scale(c.height))
 
 	canvas.Rect(0, 0, scale(c.width), scale(c.height), "fill:none;stroke:red;stroke_width:2")
@@ -174,18 +168,6 @@ func (c *CutoutLayout) placeRectangle(r Rectangle) (placedRectangle Rectangle, i
 	placed := false
 	outOfHeight := false
 
-	//ySortedRectangles := make([]Rectangle, len(c.placedRectangles))
-	//copy(ySortedRectangles, c.placedRectangles)
-	//sort.Slice(ySortedRectangles, func(i, j int) bool {
-	//	return ySortedRectangles[i].Y+ySortedRectangles[i].Height > ySortedRectangles[j].Y+ySortedRectangles[j].Height
-	//})
-	//
-	//xSortedRectangles := make([]Rectangle, len(c.placedRectangles))
-	//copy(xSortedRectangles, c.placedRectangles)
-	//sort.Slice(xSortedRectangles, func(i, j int) bool {
-	//	return xSortedRectangles[i].X+xSortedRectangles[i].Width > xSortedRectangles[j].X+xSortedRectangles[j].Width
-	//})
-
 	for _, placedR := range c.ySortedRectangles {
 		if placedR.Y+placedR.Height > r.Y {
 			continue
@@ -195,10 +177,8 @@ func (c *CutoutLayout) placeRectangle(r Rectangle) (placedRectangle Rectangle, i
 			// If we're standstill on it already
 			if r.Y == placedR.Y+placedR.Height {
 				if r.Y+r.Height <= c.height {
-					//return r, true, nil
 					placed = true
 				} else {
-					//return Rectangle{}, false, nil
 					outOfHeight = true
 				}
 			} else {
@@ -217,10 +197,8 @@ func (c *CutoutLayout) placeRectangle(r Rectangle) (placedRectangle Rectangle, i
 			if placedR.Y+placedR.Height > r.Y && placedR.Y < r.Y+r.Height {
 				if r.X == placedR.X+placedR.Width {
 					if r.Y+r.Height <= c.height {
-						//return r, true, nil
 						placed = true
 					} else {
-						//return Rectangle{}, false, nil
 						outOfHeight = true
 					}
 				} else {
@@ -380,10 +358,18 @@ func (c *CutoutLayout) GetEnergy() float64 {
 	return c.energy
 }
 
-func (c *CutoutLayout) StoreReport() {
-	c.StoreDraw()
-}
+//func (c *CutoutLayout) StoreReport() (err error) {
+//	f, err := os.Create("layout.svg")
+//	if err != nil {
+//		fmt.Errorf("error creating file. %v", err)
+//		return err
+//	}
+//
+//	return c.StoreDraw(f)
+//}
 
-func (c *CutoutLayout) GetResult() cooler.ShakeResult {
-	return cooler.ShakeResult{Energy: c.energy}
+func (c *CutoutLayout) GetResult() annealer.ShakeResult {
+	sr := annealer.ShakeResult{Energy: c.energy}
+	c.StoreDraw(&sr)
+	return sr
 }

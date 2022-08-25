@@ -1,4 +1,4 @@
-package cooler
+package annealer
 
 import (
 	"fmt"
@@ -10,21 +10,56 @@ import (
 	"time"
 )
 
+type ResultHandler interface {
+	StoreReport() (err error)
+	//Write(b []byte) (n int, err error)
+	//Read(b []byte) (n int, err error)
+}
+type ShakeResult struct {
+	Id     string
+	Energy float64
+	Tick   int
+	Temp   float64
+	Draw   string
+	Closed bool
+}
+
+func (sr *ShakeResult) Write(b []byte) (n int, err error) {
+	if sr.Closed {
+		sr.Draw = ""
+		sr.Closed = false
+	}
+	sr.Draw = sr.Draw + string(b)
+	return len(b), nil
+}
+func (sr *ShakeResult) Read(b []byte) (n int, err error) {
+	b = []byte(sr.Draw)
+	return len(sr.Draw), nil
+}
+func (sr *ShakeResult) Close() error {
+	sr.Closed = true
+	return nil
+}
+func (sr *ShakeResult) StoreReport() (err error) {
+	//f, err := os.Create("layout" + sr.Id + ".svg")
+	f, err := os.Create("layout.svg")
+	if err != nil {
+		fmt.Errorf("error creating file. %v", err)
+		return err
+	}
+	f.Write([]byte(sr.Draw))
+	return nil
+}
+
 type Shaker interface {
 	Shake() (energy float64, err error)
 	Take()
 	GetEnergy() float64
-	StoreReport()
 	GetResult() ShakeResult
 }
 
-type ShakeResult struct {
-	Energy float64
-	Tick   int
-}
-
 type Annealer interface {
-	Run() (ShakeResult, error)
+	Run(id string) (ShakeResult, error)
 }
 
 type AnnealingHist struct {
@@ -33,6 +68,7 @@ type AnnealingHist struct {
 }
 
 type AnnealingMachine struct {
+	id       string
 	temp     float64
 	stopTemp float64
 	tick     int
@@ -58,7 +94,8 @@ func NewAnnealingMachine(s Shaker, stopTemp float64, stopTick int) *AnnealingMac
 	return &am
 }
 
-func (am *AnnealingMachine) Run() (result ShakeResult, err error) {
+func (am *AnnealingMachine) Run(id string) (result ShakeResult, err error) {
+	am.id = id
 	am.reset()
 	var minE float64 = 1
 	var bestResult ShakeResult
@@ -77,7 +114,9 @@ func (am *AnnealingMachine) Run() (result ShakeResult, err error) {
 			// Get Shaker report data
 			//am.shaker.StoreReport()
 			bestResult = am.shaker.GetResult()
+			bestResult.Id = am.id
 			bestResult.Tick = am.tick
+			bestResult.Temp = am.temp
 		} else if am.shouldITransit(dE) {
 			//fmt.Println("random", e, am.temp, am.tick)
 			am.transit()
@@ -85,7 +124,7 @@ func (am *AnnealingMachine) Run() (result ShakeResult, err error) {
 		am.decreaseTemperature()
 
 		if am.tick == am.stopTick || am.temp <= am.stopTemp {
-			fmt.Println("STOP", bestResult, am.tick, am.temp)
+			fmt.Println("STOP", bestResult.Energy, bestResult.Tick, bestResult.Temp, bestResult.Id)
 			break
 		}
 		am.tick += 1
@@ -125,7 +164,7 @@ func (am *AnnealingMachine) shouldITransit(dE float64) bool {
 	}
 }
 
-func (am *AnnealingMachine) storeReport() (err error) {
+func (am *AnnealingMachine) StoreReport() (err error) {
 	var divider int = 10
 	//labelShiftX, labelShiftY, labelHeight := 5, 5, 17
 	var graphXMul, graphYMul float64 = 0.1, 400
